@@ -720,8 +720,6 @@ droproot(const char *username, const char *chroot_dir)
 			int ret = capng_change_id(pw->pw_uid, pw->pw_gid, CAPNG_NO_FLAG);
 			if (ret < 0)
 				error("capng_change_id(): return %d\n", ret);
-			else
-				fprintf(stderr, "dropped privs to %s\n", username);
 		}
 #else
 		if (initgroups(pw->pw_name, pw->pw_gid) != 0 ||
@@ -731,9 +729,6 @@ droproot(const char *username, const char *chroot_dir)
 				(unsigned long)pw->pw_uid,
 				(unsigned long)pw->pw_gid,
 				pcap_strerror(errno));
-		else {
-			fprintf(stderr, "dropped privs to %s\n", username);
-		}
 #endif /* HAVE_LIBCAP_NG */
 	} else
 		error("Couldn't find user '%.32s'", username);
@@ -1426,6 +1421,7 @@ main(int argc, char **argv)
 	cap_rights_t rights;
 	int cansandbox;
 #endif	/* HAVE_CAPSICUM */
+	int chown_flag = 0;
 	int Oflag = 1;			/* run filter code optimizer */
 	int yflag_dlt = -1;
 	const char *yflag_dlt_name = NULL;
@@ -2298,6 +2294,19 @@ DIAG_ON_ASSIGN_ENUM
 		}
 		capng_apply(CAPNG_SELECT_BOTH);
 #endif /* HAVE_LIBCAP_NG */
+	/* If user is running tcpdump as root and wants to write to the savefile,
+	 * we will check if -C is set and if it is, we will drop root
+	 * privileges right away and consequent call to>pcap_dump_open()
+	 * will most likely fail for the first file. If -C flag is not set we
+	 * will create file as root then change ownership of file to proper
+	 * user(default tcpdump) and drop root privileges.
+	 */
+	if (WFileName)
+		if (Cflag && (username || chroot_dir))
+			droproot(username, chroot_dir);
+		else
+			chown_flag = 1;
+	else
 		if (username || chroot_dir)
 			droproot(username, chroot_dir);
 
@@ -2355,6 +2364,22 @@ DIAG_ON_ASSIGN_ENUM
 #endif /* HAVE_LIBCAP_NG */
 		if (pdd == NULL)
 			error("%s", pcap_geterr(pd));
+
+		/* Change ownership of file and drop root privileges */
+		if (chown_flag) {
+			struct passwd *pwd;
+
+			pwd = getpwnam(username);
+			if (!pwd)
+				error("Couldn't find user '%s'", username);
+
+			if (strcmp(WFileName, "-") && chown(dumpinfo.CurrentFileName, pwd->pw_uid, pwd->pw_gid) < 0)
+				error("Couldn't change ownership of savefile");
+
+			if (username || chroot_dir)
+				droproot(username, chroot_dir);
+	    }
+
 #ifdef HAVE_CAPSICUM
 		set_dumper_capsicum_rights(pdd);
 #endif
