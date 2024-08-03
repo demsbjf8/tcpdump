@@ -159,14 +159,14 @@ static void p_poll(netdissect_options *, const int);
 static u_int p_ext_fields(netdissect_options *, const u_char *, u_int length);
 
 static const struct tok ntp_mode_values[] = {
-    { MODE_UNSPEC,    "unspecified" },
+    { MODE_UNSPEC,    "unspecified (mode 0)" },
     { MODE_SYM_ACT,   "symmetric active" },
     { MODE_SYM_PAS,   "symmetric passive" },
     { MODE_CLIENT,    "Client" },
     { MODE_SERVER,    "Server" },
     { MODE_BROADCAST, "Broadcast" },
-    { MODE_CONTROL,   "Control Message" },
-    { MODE_RES2,      "Reserved" },
+    { MODE_CONTROL,   "Control Message (mode 6)" },
+    { MODE_RES2,      "Reserved (mode 7)" },
     { 0, NULL }
 };
 
@@ -289,7 +289,8 @@ ntp_time_print(netdissect_options *ndo,
 	default:
 		/* In NTPv4 (RFC 5905) refid is an IPv4 address or first 32 bits of
 		   MD5 sum of IPv6 address */
-		ND_PRINT("0x%08x", GET_BE_U_4(bp->refid));
+		//ND_PRINT("0x%08x", GET_BE_U_4(bp->refid));
+		ND_PRINT("%s", GET_IPADDR_STRING(bp->refid));
 		break;
 	}
 
